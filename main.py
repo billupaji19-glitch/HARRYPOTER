@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 
 
-TOKEN = "8261486645:AAEWvrhx9-fQDKelV8aGX4hOaUhBJxAeyak"  
+TOKEN = "8355089718:AAFJutnHDoJKpn803qo3Oh4LYHMTE5Q0vzw"  
 
 fake = Faker()
 USERNAME, = range(1)
