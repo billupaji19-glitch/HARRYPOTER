@@ -1,0 +1,10 @@
+pyTelegramBotAPI>=4.27.0
+aiogram==2.15.0
+faker>=37.1.0
+pyrogram>=2.0.106
+pysocks>=1.7.1
+requests>=2.32.3
+telethon>=1.40.0
+tgcrypto>=1.2.5
+tqdm>=4.67.1
+urllib3>=2.4.0
