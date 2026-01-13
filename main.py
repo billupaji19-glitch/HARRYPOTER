@@ -1,14 +1,18 @@
 import requests, random, time, re
 from faker import Faker
 from tqdm import tqdm
-from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
-
+import telebot
+from telebot import types
+from telebot.handler_backends import State, StatesGroup
 
 TOKEN = "8355089718:AAFJutnHDoJKpn803qo3Oh4LYHMTE5Q0vzw"  
 
+bot = telebot.TeleBot(TOKEN)
 fake = Faker()
-USERNAME, = range(1)
+
+# States for conversation
+class ReportStates(StatesGroup):
+    username = State()
 
 
 def load_reports():
@@ -67,31 +71,34 @@ def send_data(data, proxy=None):
         return False, proxy if proxy else "direct"
 
 
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text("👋 Welcome! Please enter the @username or channel/group you want to report (without @): \n┏━━━━━━━━━━━━━━━━━━━━━\n┣ᴘʟᴇᴀꜱᴇ ᴊᴏɪɴ ᴍʏ ᴜᴘᴅᴀᴛᴇꜱ ᴄʜᴀɴɴᴇʟ\n┣𝐃𝐞𝐯𝐞𝐥𝐨𝐩𝐞𝐫 ➥ @NGYT777GG :")
-    return USERNAME
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.send_message(message.chat.id, "👋 Welcome! Please enter the @username or channel/group you want to report (without @): \n┏━━━━━━━━━━━━━━━━━━━━━\n┣ᴘʟᴇᴀꜱᴇ ᴊᴏɪɴ ᴍʏ ᴜᴘᴅᴀᴛᴇꜱ ᴄʜᴀɴɴᴇʟ\n┣𝐃𝐞𝐯𝐞𝐥𝐨𝐩𝐞𝐫 ➥ @NGYT777GG :")
+    bot.set_state(message.from_user.id, ReportStates.username, message.chat.id)
 
 
-def handle_username(update: Update, context: CallbackContext):
-    username = update.message.text.strip().lstrip('@')
-    context.user_data["username"] = username
-
+@bot.message_handler(state=ReportStates.username)
+def handle_username(message):
+    username = message.text.strip().lstrip('@')
+    
     if not re.match(r'^[a-zA-Z0-9_]{5,32}$', username):
-        update.message.reply_text("❌ Invalid username format.")
-        return ConversationHandler.END
+        bot.send_message(message.chat.id, "❌ Invalid username format.")
+        bot.delete_state(message.from_user.id, message.chat.id)
+        return
 
-    update.message.reply_text("🔍 Checking if the username exists...")
+    bot.send_message(message.chat.id, "🔍 Checking if the username exists...")
     if not is_valid_username(username):
-        update.message.reply_text("❌ Username not available on Telegram.")
-        return ConversationHandler.END
+        bot.send_message(message.chat.id, "❌ Username not available on Telegram.")
+        bot.delete_state(message.from_user.id, message.chat.id)
+        return
 
-    update.message.reply_text("✅ Username is valid. Starting report process...")
+    bot.send_message(message.chat.id, "✅ Username is valid. Starting report process...")
 
     # Begin reporting
     reports = load_reports()
     total = len(reports)
     success_count = 0
-    progress_message = update.message.reply_text("📤 Starting reports...")
+    progress_message = bot.send_message(message.chat.id, "📤 Starting reports...")
 
     report_log = []
     proxies = load_proxies()
@@ -115,44 +122,51 @@ def handle_username(update: Update, context: CallbackContext):
         percent = int(((i + 1) / total) * 100)
         progress_bar = "█" * (percent // 10) + "▒" * (10 - (percent // 10))
         proxy_stats = "\n".join(f"🌐 {p}: {c} successful" for p, c in success_by_proxy.items())
-        progress_message.edit_text(f"📊 Progress: [{progress_bar}] {percent}%\n📤 Sent: {i+1}/{total}\n\n{proxy_stats}")
+        
+        try:
+            bot.edit_message_text(
+                f"📊 Progress: [{progress_bar}] {percent}%\n📤 Sent: {i+1}/{total}\n\n{proxy_stats}",
+                message.chat.id,
+                progress_message.message_id
+            )
+        except:
+            pass
         
         if len(report_log) > 0 and len(report_log) % 50 == 0:
-     
             with open(f"reports_{username}.txt", "w", encoding="utf-8") as f:
                 f.writelines(report_log)
-            update.message.reply_document(
-                document=open(f"reports_{username}.txt", "rb"),
-                caption=f"📋 Report details for {success_count} reports"
-            )
+            try:
+                with open(f"reports_{username}.txt", "rb") as doc:
+                    bot.send_document(
+                        message.chat.id,
+                        doc,
+                        caption=f"📋 Report details for {success_count} reports"
+                    )
+            except:
+                pass
         
         if success_count > 0 and success_count % 50 == 0:
-            update.message.reply_text(f"✅ Successfully sent {success_count} reports!")
+            bot.send_message(message.chat.id, f"✅ Successfully sent {success_count} reports!")
 
-    progress_message.edit_text(f"✅ Complete!\n📊 Progress: [██████████] 100%\n📨 Total successful reports: {success_count}/{total}")
-    return ConversationHandler.END
+    try:
+        bot.edit_message_text(
+            f"✅ Complete!\n📊 Progress: [██████████] 100%\n📨 Total successful reports: {success_count}/{total}",
+            message.chat.id,
+            progress_message.message_id
+        )
+    except:
+        bot.send_message(message.chat.id, f"✅ Complete!\n📨 Total successful reports: {success_count}/{total}")
+    
+    bot.delete_state(message.from_user.id, message.chat.id)
 
 
-def cancel(update: Update, context: CallbackContext):
-    update.message.reply_text("❌ Cancelled.")
-    return ConversationHandler.END
+@bot.message_handler(commands=['cancel'])
+def cancel(message):
+    bot.send_message(message.chat.id, "❌ Cancelled.")
+    bot.delete_state(message.from_user.id, message.chat.id)
 
-
-def main():
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
-
-    conv = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
-        states={
-            USERNAME: [MessageHandler(Filters.text & ~Filters.command, handle_username)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)]
-    )
-
-    dp.add_handler(conv)
-    updater.start_polling()
-    updater.idle()
 
 if __name__ == "__main__":
-    main()
+    bot.enable_save_next_step_handlers(delay=2)
+    bot.load_next_step_handlers()
+    bot.infinity_polling()
